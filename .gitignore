@@ -23,6 +23,9 @@ ENV/
 .DS_Store
 Thumbs.db
 
+# Office temp/lock files
+~$*
+
 # -----------------------------
 # Sensitive / local data files
 # -----------------------------
