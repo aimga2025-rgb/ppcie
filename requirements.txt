@@ -1,4 +1,9 @@
 streamlit
+
+# Dash dependencies (ppc.py UI framework; Streamlit app reuses its business logic)
+dash
+dash-bootstrap-components
+
 pandas
 openpyxl
 
