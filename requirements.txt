@@ -1,0 +1,9 @@
+streamlit
+pandas
+openpyxl
+
+# ML (optional depending on which pages/features you port)
+xgboost
+scikit-learn
+joblib
+holidays
