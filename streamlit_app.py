@@ -1,5 +1,6 @@
 import hashlib
 import io
+import json
 import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -53,6 +54,9 @@ def _load_csv(file_bytes: bytes, **kwargs: Any) -> pd.DataFrame:
 
 REQUIRED_SEWING_SHEET = "Sewing Loading Plan"
 REQUIRED_SEWING_COLS = ["Cstmr", "Style", "SAM", "Plan Qty", "Line #", "Strt Sw Out Dt", "End Sew Date"]
+
+UPLOAD_DIR = Path(tempfile.gettempdir()) / "ppc_private_uploads"
+UPLOAD_STATE_PATH = UPLOAD_DIR / "upload_state.json"
 
 
 def _detect_inputs(files) -> dict[str, Any]:
@@ -113,7 +117,11 @@ def _validate_sewing_plan(xlsx_file) -> tuple[bool, str, pd.DataFrame | None]:
         return False, "Missing: Sewing Loading Plan workbook (.xlsx)", None
 
     try:
-        df = _load_excel_sheet(xlsx_file.getvalue(), REQUIRED_SEWING_SHEET, skiprows=2)
+        if isinstance(xlsx_file, Path):
+            file_bytes = xlsx_file.read_bytes()
+        else:
+            file_bytes = xlsx_file.getvalue()
+        df = _load_excel_sheet(file_bytes, REQUIRED_SEWING_SHEET, skiprows=2)
     except Exception as exc:
         return False, f"Could not read sheet '{REQUIRED_SEWING_SHEET}': {type(exc).__name__}: {exc}", None
 
@@ -126,11 +134,52 @@ def _validate_sewing_plan(xlsx_file) -> tuple[bool, str, pd.DataFrame | None]:
 def _write_private_upload_to_temp(uploaded_file, suffix: str) -> Path:
     file_bytes = uploaded_file.getvalue()
     digest = hashlib.sha1(file_bytes).hexdigest()[:12]
-    tmp_dir = Path(tempfile.gettempdir()) / "ppc_private_uploads"
-    tmp_dir.mkdir(parents=True, exist_ok=True)
-    out_path = tmp_dir / f"upload_{digest}{suffix}"
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    out_path = UPLOAD_DIR / f"upload_{digest}{suffix}"
     out_path.write_bytes(file_bytes)
     return out_path
+
+
+def _save_upload_state(state: dict[str, str]) -> None:
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = UPLOAD_STATE_PATH.with_suffix(".tmp")
+    tmp.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(UPLOAD_STATE_PATH)
+
+
+def _load_upload_state() -> dict[str, Path] | None:
+    try:
+        if not UPLOAD_STATE_PATH.exists():
+            return None
+        payload = json.loads(UPLOAD_STATE_PATH.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            return None
+        out: dict[str, Path] = {}
+        for key, value in payload.items():
+            if not isinstance(key, str) or not isinstance(value, str):
+                continue
+            path = Path(value)
+            if path.exists():
+                out[key] = path
+        return out or None
+    except Exception:
+        return None
+
+
+def _clear_upload_state() -> None:
+    try:
+        if UPLOAD_STATE_PATH.exists():
+            UPLOAD_STATE_PATH.unlink()
+    except Exception:
+        pass
+
+
+def _as_path(file_or_path, suffix: str) -> Path | None:
+    if file_or_path is None:
+        return None
+    if isinstance(file_or_path, Path):
+        return file_or_path
+    return _write_private_upload_to_temp(file_or_path, suffix)
 
 
 @st.cache_data(show_spinner=False)
@@ -204,6 +253,16 @@ st.markdown('<div class="muted">Production Control</div>', unsafe_allow_html=Tru
 with st.sidebar:
     st.header("Inputs")
     page = st.radio("Navigation", ["Dashboard", "PPC Planner", "Order Tracker"], index=0)
+
+    if st.button("Clear stored uploads", use_container_width=True):
+        _clear_upload_state()
+        st.session_state.pop("live_rows", None)
+        st.session_state.pop("live_last_fetch", None)
+        st.session_state.pop("prediction_queue", None)
+        st.session_state.pop("pending_prediction", None)
+        st.session_state.pop("last_training", None)
+        st.rerun()
+
     uploaded_files = st.file_uploader(
         "Upload files (Excel/CSV)",
         type=["xlsx", "csv"],
@@ -211,7 +270,39 @@ with st.sidebar:
         help="Upload your private Excel at runtime (do not commit to Git).",
     )
 
-inputs = _detect_inputs(uploaded_files)
+inputs: dict[str, Any]
+if uploaded_files:
+    inputs = _detect_inputs(uploaded_files)
+    # Persist last-known good file paths for refresh reuse.
+    state: dict[str, str] = {}
+    sewing_path = _as_path(inputs.get("sewing_plan"), ".xlsx")
+    if sewing_path:
+        state["sewing_plan"] = str(sewing_path)
+    skill_path = _as_path(inputs.get("skill_matrix"), ".xlsx")
+    if skill_path:
+        state["skill_matrix"] = str(skill_path)
+    history_path = _as_path(inputs.get("plan_history"), ".csv")
+    if history_path:
+        state["plan_history"] = str(history_path)
+    holidays_path = _as_path(inputs.get("holidays"), ".csv")
+    if holidays_path:
+        state["holidays"] = str(holidays_path)
+    if state:
+        _save_upload_state(state)
+else:
+    restored = _load_upload_state()
+    if restored:
+        inputs = {
+            "sewing_plan": restored.get("sewing_plan"),
+            "skill_matrix": restored.get("skill_matrix"),
+            "plan_history": restored.get("plan_history"),
+            "holidays": restored.get("holidays"),
+            "others": [],
+        }
+        st.sidebar.info("Using your last uploaded files (stored on server) after refresh.")
+    else:
+        inputs = {"sewing_plan": None, "skill_matrix": None, "plan_history": None, "holidays": None, "others": []}
+
 sewing_ok, sewing_msg, sewing_df_preview = _validate_sewing_plan(inputs["sewing_plan"])
 
 if page != "Order Tracker":
@@ -226,9 +317,11 @@ except Exception as exc:
 
 def _sync_private_inputs_into_ppc() -> None:
     # Wire uploaded files into ppc.py without modifying ppc.py itself.
-    if sewing_ok and inputs.get("sewing_plan") is not None:
-        plan_path = _write_private_upload_to_temp(inputs["sewing_plan"], ".xlsx")
-        ppc_dash.EXCEL_PATH = Path(plan_path)
+    sewing_obj = inputs.get("sewing_plan")
+    if sewing_ok and sewing_obj is not None:
+        plan_path = _as_path(sewing_obj, ".xlsx")
+        if plan_path is not None:
+            ppc_dash.EXCEL_PATH = Path(plan_path)
         try:
             ppc_dash._load_sewing_plan_df.cache_clear()
         except Exception:
@@ -238,9 +331,11 @@ def _sync_private_inputs_into_ppc() -> None:
         except Exception:
             pass
 
-    if inputs.get("skill_matrix") is not None:
-        skill_path = _write_private_upload_to_temp(inputs["skill_matrix"], ".xlsx")
-        ppc_dash.SKILL_MATRIX_FILE_HINT = str(skill_path)
+    skill_obj = inputs.get("skill_matrix")
+    if skill_obj is not None:
+        skill_path = _as_path(skill_obj, ".xlsx")
+        if skill_path is not None:
+            ppc_dash.SKILL_MATRIX_FILE_HINT = str(skill_path)
         # Clear cached skill matrix loads if present.
         for name in ("_load_skill_matrix_normalized", "_skill_matrix_resources_for_line"):
             fn = getattr(ppc_dash, name, None)
@@ -250,12 +345,16 @@ def _sync_private_inputs_into_ppc() -> None:
                 except Exception:
                     pass
 
-    if inputs.get("plan_history") is not None:
+    history_obj = inputs.get("plan_history")
+    if history_obj is not None:
         # If user uploads a plan history CSV, save it to the default path used by ppc.py
         # so both Streamlit and ppc.py see the same history file structure.
         try:
             ppc_dash.PLAN_HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
-            ppc_dash.PLAN_HISTORY_PATH.write_bytes(inputs["plan_history"].getvalue())
+            if isinstance(history_obj, Path):
+                ppc_dash.PLAN_HISTORY_PATH.write_bytes(history_obj.read_bytes())
+            else:
+                ppc_dash.PLAN_HISTORY_PATH.write_bytes(history_obj.getvalue())
         except Exception:
             pass
 
