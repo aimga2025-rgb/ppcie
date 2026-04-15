@@ -1,6 +1,7 @@
 import hashlib
 import io
 import json
+import secrets
 import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -11,6 +12,31 @@ import streamlit as st
 
 
 st.set_page_config(page_title="MG PPC Dashboard", layout="wide")
+
+
+def _ensure_query_sid() -> str:
+    """Ensure the URL contains a per-user SID so stored uploads don't leak across users."""
+    sid = st.query_params.get("sid")
+    if isinstance(sid, list):
+        sid = sid[0] if sid else ""
+    sid = str(sid or "").strip()
+    if not sid:
+        sid = secrets.token_urlsafe(12)
+        st.query_params["sid"] = sid
+        st.stop()
+    return sid
+
+
+SID = _ensure_query_sid()
+BASE_UPLOAD_DIR = Path(tempfile.gettempdir()) / "ppc_private_uploads"
+
+
+def _upload_dir() -> Path:
+    return BASE_UPLOAD_DIR / SID
+
+
+def _upload_state_path() -> Path:
+    return _upload_dir() / "upload_state.json"
 
 
 def _inject_theme_css() -> None:
@@ -55,8 +81,8 @@ def _load_csv(file_bytes: bytes, **kwargs: Any) -> pd.DataFrame:
 REQUIRED_SEWING_SHEET = "Sewing Loading Plan"
 REQUIRED_SEWING_COLS = ["Cstmr", "Style", "SAM", "Plan Qty", "Line #", "Strt Sw Out Dt", "End Sew Date"]
 
-UPLOAD_DIR = Path(tempfile.gettempdir()) / "ppc_private_uploads"
-UPLOAD_STATE_PATH = UPLOAD_DIR / "upload_state.json"
+# Per-user storage (keyed by SID in the URL) to survive browser refresh.
+# Note: Streamlit Cloud may wipe /tmp on restart/redeploy.
 
 
 def _detect_inputs(files) -> dict[str, Any]:
@@ -134,24 +160,28 @@ def _validate_sewing_plan(xlsx_file) -> tuple[bool, str, pd.DataFrame | None]:
 def _write_private_upload_to_temp(uploaded_file, suffix: str) -> Path:
     file_bytes = uploaded_file.getvalue()
     digest = hashlib.sha1(file_bytes).hexdigest()[:12]
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    out_path = UPLOAD_DIR / f"upload_{digest}{suffix}"
+    out_dir = _upload_dir()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"upload_{digest}{suffix}"
     out_path.write_bytes(file_bytes)
     return out_path
 
 
 def _save_upload_state(state: dict[str, str]) -> None:
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    tmp = UPLOAD_STATE_PATH.with_suffix(".tmp")
+    out_dir = _upload_dir()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    state_path = _upload_state_path()
+    tmp = state_path.with_suffix(".tmp")
     tmp.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(UPLOAD_STATE_PATH)
+    tmp.replace(state_path)
 
 
 def _load_upload_state() -> dict[str, Path] | None:
     try:
-        if not UPLOAD_STATE_PATH.exists():
+        state_path = _upload_state_path()
+        if not state_path.exists():
             return None
-        payload = json.loads(UPLOAD_STATE_PATH.read_text(encoding="utf-8"))
+        payload = json.loads(state_path.read_text(encoding="utf-8"))
         if not isinstance(payload, dict):
             return None
         out: dict[str, Path] = {}
@@ -168,8 +198,17 @@ def _load_upload_state() -> dict[str, Path] | None:
 
 def _clear_upload_state() -> None:
     try:
-        if UPLOAD_STATE_PATH.exists():
-            UPLOAD_STATE_PATH.unlink()
+        out_dir = _upload_dir()
+        state_path = _upload_state_path()
+        if state_path.exists():
+            state_path.unlink()
+        # Remove uploaded payload files for this SID.
+        if out_dir.exists():
+            for p in out_dir.glob("upload_*"):
+                try:
+                    p.unlink()
+                except Exception:
+                    pass
     except Exception:
         pass
 
@@ -300,6 +339,17 @@ else:
             "others": [],
         }
         st.sidebar.info("Using your last uploaded files (stored on server) after refresh.")
+        st.sidebar.caption(
+            "Note: Streamlit clears the upload widget on refresh; the app can still reuse stored files."
+        )
+        st.sidebar.write(
+            {
+                "sewing_plan": str(inputs["sewing_plan"]) if inputs["sewing_plan"] else None,
+                "skill_matrix": str(inputs["skill_matrix"]) if inputs["skill_matrix"] else None,
+                "plan_history": str(inputs["plan_history"]) if inputs["plan_history"] else None,
+                "holidays": str(inputs["holidays"]) if inputs["holidays"] else None,
+            }
+        )
     else:
         inputs = {"sewing_plan": None, "skill_matrix": None, "plan_history": None, "holidays": None, "others": []}
 
@@ -385,20 +435,20 @@ if page == "Dashboard":
             disabled=plan_df.empty,
         )
 
+    # KPI logic mirrors ppc.py: KPIs come from saved plan history (not from the Sewing Plan upload).
+    df_for_kpi = plan_df
     if month_value and "Ex-mill Mnth" in plan_df.columns:
-        filtered = plan_df[plan_df["Ex-mill Mnth"].astype(str).str.strip() == str(month_value).strip()]
-        if filtered.empty:
-            filtered = plan_df
-    else:
-        filtered = plan_df
+        df_for_kpi = plan_df[plan_df["Ex-mill Mnth"].astype(str).str.strip() == str(month_value).strip()]
+        if df_for_kpi.empty:
+            df_for_kpi = plan_df
 
-    if search_bpo:
-        q = str(search_bpo).strip().lower()
-        bpo_col = "BPO Number" if "BPO Number" in filtered.columns else ("PO#" if "PO#" in filtered.columns else None)
-        if bpo_col:
-            filtered = filtered[filtered[bpo_col].astype(str).str.lower().str.contains(q, na=False)]
+    k1, k2, k3, _k4_plain = _kpis_from_df(df_for_kpi)
+    try:
+        total_plan_qty_num = float(pd.to_numeric(df_for_kpi.get("Plan Qty", 0), errors="coerce").fillna(0).sum() or 0)
+        k4 = ppc_dash._format_plan_qty(total_plan_qty_num)
+    except Exception:
+        k4 = _k4_plain
 
-    k1, k2, k3, k4 = _kpis_from_df(filtered if not filtered.empty else plan_df)
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Active Lines", k1)
     m2.metric("Active Orders", k2)
@@ -406,10 +456,105 @@ if page == "Dashboard":
     m4.metric("Total Plan Qty", k4)
 
     st.markdown("#### All Month Plans")
-    if filtered.empty:
-        st.info("No saved plans yet. Approve predictions in 'PPC Planner' to create plan history.")
+
+    if plan_df.empty:
+        st.info(
+            "No saved plans found yet. To populate this dashboard like your local Dash app, either:\n"
+            "• Upload `saved_plan_history.csv` from your PC, OR\n"
+            "• Go to 'PPC Planner' → Refresh live feed → Generate predictions → OK (Save)."
+        )
     else:
-        st.dataframe(filtered, use_container_width=True, height=520)
+        df = df_for_kpi.copy()
+
+        bpo_query_text = str(search_bpo or "").strip().upper()
+        if bpo_query_text:
+            if "BPO Number" not in df.columns and "PO#" in df.columns:
+                df["BPO Number"] = df["PO#"]
+            if "BPO Number" not in df.columns:
+                df["BPO Number"] = ""
+            bpo_series = df["BPO Number"].astype(str).str.upper()
+            df = df[bpo_series.str.contains(bpo_query_text, na=False)]
+
+        if df.empty:
+            label = "All months" if not month_value else f"Month: {month_value}"
+            if bpo_query_text:
+                label = f"{label} | BPO Number: {bpo_query_text}"
+            st.warning(f"No saved plans available for selected filter. ({label})")
+        else:
+            for required in [
+                "Line #",
+                "BPO Number",
+                "PO#",
+                "Cstmr",
+                "Style",
+                "SAM",
+                "Plan Qty",
+                "Pln Eff %",
+                "P.Dy Cpcty",
+                "Com Dys Wk",
+                "EX-MILL",
+                "Created At",
+            ]:
+                if required not in df.columns:
+                    df[required] = ""
+
+            # Mirror Dash grouping logic to match the local dashboard table.
+            line_numbers = df["Line #"].astype(str).str.extract(r"(\d+)", expand=False)
+            df["_line_sort"] = pd.to_numeric(line_numbers, errors="coerce").fillna(10**6)
+            if "Created At" in df.columns:
+                df = df.sort_values(by=["_line_sort", "Line #", "Created At"], ascending=[True, True, False])
+            else:
+                df = df.sort_values(by=["_line_sort", "Line #"], ascending=[True, True])
+
+            month_stats = ppc_dash._month_workday_stats(month_value)
+            line_machines = 58
+            working_mins_per_day = 480
+            available_sam = month_stats["work_days"] * line_machines * working_mins_per_day
+
+            grouped_rows: list[dict[str, Any]] = []
+            for line_value, group in df.groupby(df["Line #"].astype(str), sort=False):
+                planned_qty = float(pd.to_numeric(group["Plan Qty"], errors="coerce").fillna(0).sum())
+                avg_sam = float(pd.to_numeric(group["SAM"], errors="coerce").dropna().mean() or 0.0)
+
+                eff_raw = group["Pln Eff %"].astype(str).str.replace("%", "", regex=False).str.strip()
+                eff_numeric = pd.to_numeric(eff_raw, errors="coerce").dropna()
+                if not eff_numeric.empty:
+                    avg_eff = float(eff_numeric.mean())
+                    planned_eff_pct = avg_eff * 100.0 if avg_eff <= 1.5 else avg_eff
+                else:
+                    planned_eff_pct = 75.0
+                planned_eff_pct = max(75.0, float(planned_eff_pct))
+
+                produced_sam = planned_qty * avg_sam
+                work_days = int(month_stats["work_days"])
+                per_day_cap = (planned_qty / work_days) if work_days > 0 else 0.0
+
+                grouped_rows.append(
+                    {
+                        "SR#": None,
+                        "Line": str(line_value),
+                        "Planned Quantity": int(round(planned_qty)),
+                        "Average SAM": round(avg_sam, 1),
+                        "Planned Efficiency": f"{planned_eff_pct:.0f}%",
+                        "Per day Capacity": int(round(per_day_cap)),
+                        "Work Days": int(month_stats["work_days"]),
+                        "Sundays": int(month_stats["sundays"]),
+                        "Holiday": int(month_stats["holiday"]),
+                        "Month Days": int(month_stats["month_days"]),
+                        "Available SAM": int(available_sam),
+                        "Produced SAM": int(round(produced_sam)),
+                    }
+                )
+
+            table_df = pd.DataFrame(grouped_rows)
+            if not table_df.empty:
+                table_df["SR#"] = range(1, len(table_df) + 1)
+
+            label = "All months" if not month_value else f"Month: {month_value}"
+            if bpo_query_text:
+                label = f"{label} | BPO Number: {bpo_query_text}"
+            st.caption(f"{label} | {len(table_df)} line(s)")
+            st.dataframe(table_df, use_container_width=True, height=520)
 
 
 elif page == "PPC Planner":
