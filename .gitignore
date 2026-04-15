@@ -26,6 +26,10 @@ Thumbs.db
 # Office temp/lock files
 ~$*
 
+# Documentation binaries (keep out of public repo)
+*.doc
+*.docx
+
 # -----------------------------
 # Sensitive / local data files
 # -----------------------------
