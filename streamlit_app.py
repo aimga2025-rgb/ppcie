@@ -167,7 +167,7 @@ def _write_private_upload_to_temp(uploaded_file, suffix: str) -> Path:
     return out_path
 
 
-def _save_upload_state(state: dict[str, str]) -> None:
+def _save_upload_state(state: dict[str, Any]) -> None:
     out_dir = _upload_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
     state_path = _upload_state_path()
@@ -176,7 +176,13 @@ def _save_upload_state(state: dict[str, str]) -> None:
     tmp.replace(state_path)
 
 
-def _load_upload_state() -> dict[str, Path] | None:
+def _load_upload_state() -> dict[str, Any] | None:
+    """Load persisted state.
+
+    Supports both formats:
+    - legacy: {"sewing_plan": "/tmp/...", ...}
+    - current: {"files": {...}, "supabase": {...}}
+    """
     try:
         state_path = _upload_state_path()
         if not state_path.exists():
@@ -184,14 +190,34 @@ def _load_upload_state() -> dict[str, Path] | None:
         payload = json.loads(state_path.read_text(encoding="utf-8"))
         if not isinstance(payload, dict):
             return None
-        out: dict[str, Path] = {}
-        for key, value in payload.items():
-            if not isinstance(key, str) or not isinstance(value, str):
-                continue
-            path = Path(value)
-            if path.exists():
-                out[key] = path
-        return out or None
+
+        files_payload = payload.get("files")
+        supabase_payload = payload.get("supabase")
+
+        if files_payload is None and all(isinstance(v, str) for v in payload.values()):
+            # Back-compat legacy format.
+            files_payload = payload
+            supabase_payload = None
+
+        files_out: dict[str, Path] = {}
+        if isinstance(files_payload, dict):
+            for key, value in files_payload.items():
+                if not isinstance(key, str) or not isinstance(value, str):
+                    continue
+                path = Path(value)
+                if path.exists():
+                    files_out[key] = path
+
+        supabase_out: dict[str, str] = {}
+        if isinstance(supabase_payload, dict):
+            for key, value in supabase_payload.items():
+                if isinstance(key, str) and isinstance(value, str) and value.strip():
+                    supabase_out[key] = value.strip()
+
+        if not files_out and not supabase_out:
+            return None
+
+        return {"files": files_out, "supabase": supabase_out or None}
     except Exception:
         return None
 
@@ -289,6 +315,48 @@ _ensure_state()
 st.markdown('<div class="brand">MG PPC</div>', unsafe_allow_html=True)
 st.markdown('<div class="muted">Production Control</div>', unsafe_allow_html=True)
 
+def _download_supabase_object_to_path(bucket: str, object_path: str) -> Path:
+    """Download a Supabase Storage object into the per-user upload dir and return the local Path."""
+    url = str(st.secrets.get("SUPABASE_URL", "") or "").strip()
+    key = str(
+        st.secrets.get("SUPABASE_SERVICE_ROLE_KEY", "")
+        or st.secrets.get("SUPABASE_ANON_KEY", "")
+        or ""
+    ).strip()
+
+    if not url or not key:
+        raise RuntimeError(
+            "Missing Supabase secrets. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (recommended) in Streamlit secrets."
+        )
+
+    try:
+        from supabase import create_client  # type: ignore
+    except Exception as exc:
+        raise RuntimeError(f"Supabase client not installed: {exc}")
+
+    client = create_client(url, key)
+    bucket = str(bucket or "").strip()
+    object_path = str(object_path or "").strip().lstrip("/")
+    if not bucket or not object_path:
+        raise ValueError("Bucket and object path are required")
+
+    data = client.storage.from_(bucket).download(object_path)
+    if not isinstance(data, (bytes, bytearray)):
+        # Some versions may return a Response-like object.
+        try:
+            data = bytes(data)  # type: ignore
+        except Exception:
+            raise RuntimeError("Unexpected Supabase download response")
+
+    suffix = ("." + object_path.split(".")[-1].lower()) if "." in object_path else ""
+    digest = hashlib.sha1(bytes(data)).hexdigest()[:12]
+    out_dir = _upload_dir()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"supabase_{digest}{suffix}"
+    out_path.write_bytes(bytes(data))
+    return out_path
+
+
 with st.sidebar:
     st.header("Inputs")
     page = st.radio("Navigation", ["Dashboard", "PPC Planner", "Order Tracker"], index=0)
@@ -302,43 +370,109 @@ with st.sidebar:
         st.session_state.pop("last_training", None)
         st.rerun()
 
-    uploaded_files = st.file_uploader(
-        "Upload files (Excel/CSV)",
-        type=["xlsx", "csv"],
-        accept_multiple_files=True,
-        help="Upload your private Excel at runtime (do not commit to Git).",
-    )
+    data_source = st.radio("Data source", ["Upload", "Supabase"], index=0, horizontal=True)
+
+    uploaded_files = None
+    if data_source == "Upload":
+        uploaded_files = st.file_uploader(
+            "Upload files (Excel/CSV)",
+            type=["xlsx", "csv"],
+            accept_multiple_files=True,
+            help="Upload your private Excel at runtime (do not commit to Git).",
+        )
+    else:
+        st.caption("Load private files from Supabase Storage (persistent across refresh/restarts).")
+        bucket = st.text_input("Supabase bucket", value=str(st.session_state.get("sb_bucket", "")))
+        sewing_obj = st.text_input("Sewing plan object path (.xlsx)", value=str(st.session_state.get("sb_sewing", "")))
+        history_obj = st.text_input("Plan history object path (.csv)", value=str(st.session_state.get("sb_history", "")))
+        skill_obj = st.text_input("Skill matrix object path (.xlsx) (optional)", value=str(st.session_state.get("sb_skill", "")))
+
+        if st.button("Load from Supabase", use_container_width=True, type="primary"):
+            st.session_state["sb_bucket"] = bucket
+            st.session_state["sb_sewing"] = sewing_obj
+            st.session_state["sb_history"] = history_obj
+            st.session_state["sb_skill"] = skill_obj
+
+            try:
+                files_state: dict[str, str] = {}
+                supa_state: dict[str, str] = {
+                    "bucket": str(bucket or "").strip(),
+                    "sewing_plan": str(sewing_obj or "").strip(),
+                    "plan_history": str(history_obj or "").strip(),
+                    "skill_matrix": str(skill_obj or "").strip(),
+                }
+
+                if sewing_obj:
+                    local = _download_supabase_object_to_path(bucket, sewing_obj)
+                    files_state["sewing_plan"] = str(local)
+                if history_obj:
+                    local = _download_supabase_object_to_path(bucket, history_obj)
+                    files_state["plan_history"] = str(local)
+                if skill_obj:
+                    local = _download_supabase_object_to_path(bucket, skill_obj)
+                    files_state["skill_matrix"] = str(local)
+
+                _save_upload_state({"files": files_state, "supabase": supa_state})
+                st.success("Loaded from Supabase.")
+                st.rerun()
+            except Exception as exc:
+                st.error(f"Supabase load failed: {exc}")
 
 inputs: dict[str, Any]
 if uploaded_files:
     inputs = _detect_inputs(uploaded_files)
     # Persist last-known good file paths for refresh reuse.
-    state: dict[str, str] = {}
+    files_state: dict[str, str] = {}
     sewing_path = _as_path(inputs.get("sewing_plan"), ".xlsx")
     if sewing_path:
-        state["sewing_plan"] = str(sewing_path)
+        files_state["sewing_plan"] = str(sewing_path)
     skill_path = _as_path(inputs.get("skill_matrix"), ".xlsx")
     if skill_path:
-        state["skill_matrix"] = str(skill_path)
+        files_state["skill_matrix"] = str(skill_path)
     history_path = _as_path(inputs.get("plan_history"), ".csv")
     if history_path:
-        state["plan_history"] = str(history_path)
+        files_state["plan_history"] = str(history_path)
     holidays_path = _as_path(inputs.get("holidays"), ".csv")
     if holidays_path:
-        state["holidays"] = str(holidays_path)
-    if state:
-        _save_upload_state(state)
+        files_state["holidays"] = str(holidays_path)
+    if files_state:
+        _save_upload_state({"files": files_state, "supabase": None})
 else:
     restored = _load_upload_state()
     if restored:
+        restored_files: dict[str, Path] = restored.get("files") or {}
+        supa: dict[str, str] | None = restored.get("supabase")
+
+        # If local files were wiped (e.g., container restart) but Supabase config exists, re-download.
+        if supa and isinstance(supa, dict):
+            bucket = supa.get("bucket", "")
+            if "sewing_plan" not in restored_files and supa.get("sewing_plan"):
+                try:
+                    p = _download_supabase_object_to_path(bucket, supa["sewing_plan"])
+                    restored_files["sewing_plan"] = p
+                except Exception:
+                    pass
+            if "plan_history" not in restored_files and supa.get("plan_history"):
+                try:
+                    p = _download_supabase_object_to_path(bucket, supa["plan_history"])
+                    restored_files["plan_history"] = p
+                except Exception:
+                    pass
+            if "skill_matrix" not in restored_files and supa.get("skill_matrix"):
+                try:
+                    p = _download_supabase_object_to_path(bucket, supa["skill_matrix"])
+                    restored_files["skill_matrix"] = p
+                except Exception:
+                    pass
+
         inputs = {
-            "sewing_plan": restored.get("sewing_plan"),
-            "skill_matrix": restored.get("skill_matrix"),
-            "plan_history": restored.get("plan_history"),
-            "holidays": restored.get("holidays"),
+            "sewing_plan": restored_files.get("sewing_plan"),
+            "skill_matrix": restored_files.get("skill_matrix"),
+            "plan_history": restored_files.get("plan_history"),
+            "holidays": restored_files.get("holidays"),
             "others": [],
         }
-        st.sidebar.info("Using your last uploaded files (stored on server) after refresh.")
+        st.sidebar.info("Using your last files after refresh.")
         st.sidebar.caption(
             "Note: Streamlit clears the upload widget on refresh; the app can still reuse stored files."
         )

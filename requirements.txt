@@ -7,6 +7,9 @@ dash-bootstrap-components
 pandas
 openpyxl
 
+# Optional: pull private inputs from Supabase Storage
+supabase
+
 # ML (optional depending on which pages/features you port)
 xgboost
 scikit-learn
