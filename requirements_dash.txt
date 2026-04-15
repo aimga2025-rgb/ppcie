@@ -1,0 +1,15 @@
+dash
+# Dash Bootstrap Components used by ppc.py
+dash-bootstrap-components
+
+pandas
+openpyxl
+
+# ML stack used by ppc.py (optional at runtime but safe to include for full parity)
+xgboost
+scikit-learn
+joblib
+holidays
+
+# Production server (Linux hosts)
+gunicorn
