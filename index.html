@@ -1,0 +1,1151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MG PPC Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --sidebar: #0d1224;
+    --card: #111827;
+    --card2: #161f35;
+    --accent: #00c6ff;
+    --accent2: #0072ff;
+    --green: #00e5a0;
+    --yellow: #ffc107;
+    --red: #ff4757;
+    --orange: #ff7043;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --border: #1e2d4a;
+    --glow: 0 0 20px rgba(0,198,255,0.15);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ===== SIDEBAR ===== */
+  .sidebar {
+    width: 220px;
+    min-height: 100vh;
+    background: var(--sidebar);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    left: 0; top: 0; bottom: 0;
+    z-index: 100;
+  }
+
+  .sidebar-logo {
+    padding: 28px 20px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar-logo .brand {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .sidebar-logo .sub {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+
+  .sidebar-nav {
+    padding: 24px 12px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: var(--muted);
+    font-size: 14px;
+    font-weight: 500;
+    border: 1px solid transparent;
+  }
+  .nav-item:hover {
+    background: var(--card2);
+    color: var(--text);
+    border-color: var(--border);
+  }
+  .nav-item.active {
+    background: linear-gradient(135deg, rgba(0,198,255,0.15), rgba(0,114,255,0.1));
+    color: var(--accent);
+    border-color: rgba(0,198,255,0.3);
+    box-shadow: var(--glow);
+  }
+  .nav-icon { font-size: 18px; width: 22px; text-align: center; }
+
+  .sidebar-footer {
+    padding: 16px 20px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  /* ===== MAIN ===== */
+  .main {
+    margin-left: 220px;
+    flex: 1;
+    padding: 28px;
+    min-height: 100vh;
+  }
+
+  /* ===== PAGE ===== */
+  .page { display: none; animation: fadeIn 0.3s ease; }
+  .page.active { display: block; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+
+  /* ===== TOP BAR ===== */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 28px;
+  }
+  .topbar h1 {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: 1px;
+  }
+  .topbar .badge {
+    background: rgba(0,198,255,0.1);
+    border: 1px solid rgba(0,198,255,0.3);
+    color: var(--accent);
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .live-dot {
+    display: inline-block;
+    width: 7px; height: 7px;
+    background: var(--green);
+    border-radius: 50%;
+    margin-right: 6px;
+    animation: pulse 1.5s infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* ===== CARDS ===== */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .kpi-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .kpi-card:hover { transform: translateY(-2px); box-shadow: var(--glow); }
+  .kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+  }
+  .kpi-card.blue::before { background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+  .kpi-card.green::before { background: linear-gradient(90deg, var(--green), #00b894); }
+  .kpi-card.yellow::before { background: linear-gradient(90deg, var(--yellow), #ff9f43); }
+  .kpi-card.red::before { background: linear-gradient(90deg, var(--red), var(--orange)); }
+
+  .kpi-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 10px; }
+  .kpi-value {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+  .kpi-card.blue .kpi-value { color: var(--accent); }
+  .kpi-card.green .kpi-value { color: var(--green); }
+  .kpi-card.yellow .kpi-value { color: var(--yellow); }
+  .kpi-card.red .kpi-value { color: var(--red); }
+  .kpi-sub { font-size: 12px; color: var(--muted); }
+
+  .kpi-icon {
+    position: absolute;
+    right: 16px; top: 16px;
+    font-size: 28px;
+    opacity: 0.15;
+  }
+
+  /* ===== SECTION TITLE ===== */
+  .section-title {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    margin-bottom: 14px;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+    margin-left: 8px;
+  }
+
+  /* ===== LINE TABLE ===== */
+  .lines-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+  .line-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .line-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .line-name { font-family: 'Rajdhani', sans-serif; font-size: 17px; font-weight: 700; color: var(--accent); }
+  .eff-badge {
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .eff-high { background: rgba(0,229,160,0.15); color: var(--green); }
+  .eff-mid { background: rgba(255,193,7,0.15); color: var(--yellow); }
+  .eff-low { background: rgba(255,71,87,0.15); color: var(--red); }
+
+  .line-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat-item { }
+  .stat-item .s-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; }
+  .stat-item .s-val { font-size: 15px; font-weight: 600; }
+
+  /* ===== PROGRESS BAR ===== */
+  .prog-bar {
+    background: var(--border);
+    border-radius: 4px;
+    height: 5px;
+    margin-top: 12px;
+    overflow: hidden;
+  }
+  .prog-fill {
+    height: 100%;
+    border-radius: 4px;
+    background: linear-gradient(90deg, var(--accent2), var(--accent));
+    transition: width 0.5s;
+  }
+
+  /* ===== ORDER STATUS TRACKER ===== */
+  .order-status-section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+  }
+  .order-select-bar {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+  .order-chip {
+    padding: 7px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--card2);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.2s;
+    color: var(--muted);
+  }
+  .order-chip:hover, .order-chip.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(0,198,255,0.08);
+  }
+
+  /* Stage Tracker */
+  .stage-tracker {
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+    overflow-x: auto;
+    padding-bottom: 8px;
+  }
+  .stage-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+    min-width: 90px;
+    position: relative;
+    cursor: pointer;
+  }
+  .stage-item:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    top: 16px;
+    left: 50%;
+    width: 100%;
+    height: 2px;
+    background: var(--border);
+    z-index: 0;
+  }
+  .stage-item.done:not(:last-child)::after { background: var(--green); }
+  .stage-item.current:not(:last-child)::after { background: var(--yellow); }
+
+  .stage-dot {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+    z-index: 1;
+    position: relative;
+    border: 2px solid var(--border);
+    background: var(--card);
+    transition: all 0.2s;
+  }
+  .stage-item.done .stage-dot { background: var(--green); border-color: var(--green); color: #000; }
+  .stage-item.current .stage-dot { background: var(--yellow); border-color: var(--yellow); color: #000; box-shadow: 0 0 12px rgba(255,193,7,0.5); }
+  .stage-item.pending .stage-dot { background: var(--card2); border-color: var(--border); color: var(--muted); }
+
+  .stage-label { font-size: 10px; color: var(--muted); text-align: center; margin-top: 8px; line-height: 1.3; }
+  .stage-item.done .stage-label { color: var(--green); }
+  .stage-item.current .stage-label { color: var(--yellow); font-weight: 600; }
+
+  .stage-detail-panel {
+    margin-top: 20px;
+    background: var(--card2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    display: none;
+  }
+  .stage-detail-panel.visible { display: block; animation: fadeIn 0.2s; }
+  .sdp-title { font-size: 13px; font-weight: 600; color: var(--accent); margin-bottom: 10px; }
+  .sdp-info { font-size: 13px; color: var(--muted); line-height: 1.8; }
+
+  /* ===== TABLE ===== */
+  .tbl-wrap {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .tbl-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .tbl-header h3 { font-family: 'Rajdhani', sans-serif; font-size: 17px; font-weight: 600; }
+  .tbl-search {
+    padding: 7px 14px;
+    background: var(--card2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 13px;
+    outline: none;
+    width: 200px;
+    transition: border-color 0.2s;
+  }
+  .tbl-search:focus { border-color: var(--accent); }
+
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    text-align: left;
+    padding: 12px 16px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    background: var(--card2);
+  }
+  tbody tr {
+    border-bottom: 1px solid rgba(30,45,74,0.5);
+    transition: background 0.15s;
+    cursor: pointer;
+  }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: rgba(0,198,255,0.04); }
+  tbody td { padding: 13px 16px; font-size: 13px; vertical-align: middle; }
+  .po-link { color: var(--accent); font-weight: 600; text-decoration: none; }
+  .po-link:hover { text-decoration: underline; }
+
+  .status-pill {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .s-cutting { background: rgba(0,229,160,0.12); color: var(--green); }
+  .s-fid { background: rgba(255,193,7,0.12); color: var(--yellow); }
+  .s-awaited { background: rgba(255,71,87,0.12); color: var(--red); }
+  .s-partial { background: rgba(255,112,67,0.12); color: var(--orange); }
+
+  /* ===== ORDER DETAIL MODAL ===== */
+  .modal-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 1000;
+    backdrop-filter: blur(4px);
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.open { display: flex; animation: fadeIn 0.2s; }
+  .modal {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    width: 780px;
+    max-width: 95vw;
+    max-height: 85vh;
+    overflow-y: auto;
+    padding: 28px;
+    position: relative;
+  }
+  .modal-close {
+    position: absolute;
+    top: 16px; right: 20px;
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 22px;
+    cursor: pointer;
+    transition: color 0.2s;
+  }
+  .modal-close:hover { color: var(--text); }
+  .modal-title {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 20px;
+  }
+  .modal-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .detail-field { background: var(--card2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; }
+  .detail-field label { display: block; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 4px; }
+  .detail-field span { font-size: 14px; font-weight: 500; word-break: break-word; }
+  .detail-field.full { grid-column: 1/-1; }
+
+  /* ===== IE PLANNER ===== */
+  .ie-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+  .ie-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+  }
+  .ie-card h3 { font-family: 'Rajdhani', sans-serif; font-size: 18px; font-weight: 600; margin-bottom: 16px; color: var(--accent); }
+  .ie-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(30,45,74,0.5); }
+  .ie-row:last-child { border-bottom: none; }
+  .ie-row .ie-lbl { font-size: 13px; color: var(--muted); }
+  .ie-row .ie-val { font-size: 14px; font-weight: 600; }
+  .ie-row .ie-val.g { color: var(--green); }
+  .ie-row .ie-val.y { color: var(--yellow); }
+  .ie-row .ie-val.b { color: var(--accent); }
+
+  .eff-meter {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    margin-bottom: 24px;
+  }
+  .eff-meter h3 { font-family: 'Rajdhani', sans-serif; font-size: 18px; font-weight: 600; margin-bottom: 16px; }
+  .meter-bars { display: flex; gap: 10px; align-items: flex-end; height: 120px; }
+  .meter-bar-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .meter-bar-outer { flex: 1; width: 100%; background: var(--card2); border-radius: 6px 6px 0 0; display: flex; align-items: flex-end; }
+  .meter-bar-inner {
+    width: 100%;
+    border-radius: 6px 6px 0 0;
+    background: linear-gradient(180deg, var(--accent), var(--accent2));
+    transition: height 0.8s ease;
+    position: relative;
+  }
+  .meter-bar-inner.low { background: linear-gradient(180deg, var(--yellow), var(--orange)); }
+  .meter-label { font-size: 10px; color: var(--muted); text-align: center; }
+  .meter-pct { font-size: 12px; font-weight: 600; color: var(--text); }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="brand">MG PPC</div>
+    <div class="sub">Production Control</div>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="nav-item active" onclick="switchPage('dashboard')">
+      <span class="nav-icon">📊</span> Dashboard
+    </div>
+    <div class="nav-item" onclick="switchPage('ppc')">
+      <span class="nav-icon">📋</span> PPC Planner
+    </div>
+    <div class="nav-item" onclick="switchPage('ie')">
+      <span class="nav-icon">⚙️</span> IE Planner
+    </div>
+  </nav>
+  <div class="sidebar-footer">
+    Sewing Loading Plan<br>Apr 2026 · Active
+  </div>
+</aside>
+
+<!-- MAIN -->
+<main class="main">
+
+  <!-- ===== DASHBOARD PAGE ===== -->
+  <div class="page active" id="page-dashboard">
+    <div class="topbar">
+      <h1>📊 Production Dashboard</h1>
+      <div class="badge"><span class="live-dot"></span>Live · Apr 2026</div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="kpi-grid">
+      <div class="kpi-card blue">
+        <div class="kpi-icon">🏭</div>
+        <div class="kpi-label">Active Lines</div>
+        <div class="kpi-value">14</div>
+        <div class="kpi-sub">Production lines running</div>
+      </div>
+      <div class="kpi-card green">
+        <div class="kpi-icon">📦</div>
+        <div class="kpi-label">Active Orders</div>
+        <div class="kpi-value">42</div>
+        <div class="kpi-sub">Orders in pipeline</div>
+      </div>
+      <div class="kpi-card yellow">
+        <div class="kpi-icon">⚡</div>
+        <div class="kpi-label">Avg Efficiency</div>
+        <div class="kpi-value">72.4%</div>
+        <div class="kpi-sub">Target: 75%</div>
+      </div>
+      <div class="kpi-card red">
+        <div class="kpi-icon">⏰</div>
+        <div class="kpi-label">Total Plan Qty</div>
+        <div class="kpi-value">1.8L</div>
+        <div class="kpi-sub">Units this month</div>
+      </div>
+    </div>
+
+    <!-- Active Lines -->
+    <div class="section-title">Active Production Lines</div>
+    <div class="lines-grid" style="margin-bottom:28px">
+
+      <div class="line-card">
+        <div class="line-header">
+          <span class="line-name">L#1-H</span>
+          <span class="eff-badge eff-high">75% Eff</span>
+        </div>
+        <div class="line-stats">
+          <div class="stat-item">
+            <div class="s-label">Plan Qty</div>
+            <div class="s-val">9,319</div>
+          </div>
+          <div class="stat-item">
+            <div class="s-label">Bal Sew</div>
+            <div class="s-val" style="color:var(--yellow)">1,612</div>
+          </div>
+          <div class="stat-item">
+            <div class="s-label">Capacity/Day</div>
+            <div class="s-val">1,703</div>
+          </div>
+          <div class="stat-item">
+            <div class="s-label">SAM</div>
+            <div class="s-val">12.26</div>
+          </div>
+        </div>
+        <div class="prog-bar"><div class="prog-fill" style="width:83%"></div></div>
+      </div>
+
+      <div class="line-card">
+        <div class="line-header">
+          <span class="line-name">L#2 MZ</span>
+          <span class="eff-badge eff-high">90% Eff</span>
+        </div>
+        <div class="line-stats">
+          <div class="stat-item">
+            <div class="s-label">Plan Qty</div>
+            <div class="s-val">5,150</div>
+          </div>
+          <div class="stat-item">
+            <div class="s-label">Bal Sew</div>
+            <div class="s-val" style="color:var(--green)">5,090</div>
+          </div>
+          <div class="stat-item">
+            <div class="s-label">Capacity/Day</div>
+            <div class="s-val">1,884</div>
+          </div>
+          <div class="stat-item">
+            <div class="s-label">SAM</div>
+            <div class="s-val">15.82</div>
+          </div>
+        </div>
+        <div class="prog-bar"><div class="prog-fill" style="width:1.2%"></div></div>
+      </div>
+
+      <div class="line-card">
+        <div class="line-header">
+          <span class="line-name">L#4 MZ</span>
+          <span class="eff-badge eff-mid">80% Eff</span>
+        </div>
+        <div class="line-stats">
+          <div class="stat-item">
+            <div class="s-label">Plan Qty</div>
+            <div class="s-val">2,562</div>
+          </div>
+          <div class="stat-item">
+            <div class="s-label">Bal Sew</div>
+            <div class="s-val" style="color:var(--green)">44</div>
+          </div>
+          <div class="stat-item">
+            <div class="s-label">Capacity/Day</div>
+            <div class="s-val">1,917</div>
+          </div>
+          <div class="stat-item">
+            <div class="s-label">SAM</div>
+            <div class="s-val">15.82</div>
+          </div>
+        </div>
+        <div class="prog-bar"><div class="prog-fill" style="width:98%"></div></div>
+      </div>
+
+      <div class="line-card">
+        <div class="line-header">
+          <span class="line-name">L#6</span>
+          <span class="eff-badge eff-high">73% Eff</span>
+        </div>
+        <div class="line-stats">
+          <div class="stat-item">
+            <div class="s-label">Plan Qty</div>
+            <div class="s-val">33,967</div>
+          </div>
+          <div class="stat-item">
+            <div class="s-label">Bal Sew</div>
+            <div class="s-val" style="color:var(--yellow)">12,340</div>
+          </div>
+          <div class="stat-item">
+            <div class="s-label">Capacity/Day</div>
+            <div class="s-val">1,476</div>
+          </div>
+          <div class="stat-item">
+            <div class="s-label">SAM</div>
+            <div class="s-val">15.24</div>
+          </div>
+        </div>
+        <div class="prog-bar"><div class="prog-fill" style="width:64%"></div></div>
+      </div>
+
+      <div class="line-card">
+        <div class="line-header">
+          <span class="line-name">L#8</span>
+          <span class="eff-badge eff-high">72% Eff</span>
+        </div>
+        <div class="line-stats">
+          <div class="stat-item">
+            <div class="s-label">Plan Qty</div>
+            <div class="s-val">26,674</div>
+          </div>
+          <div class="stat-item">
+            <div class="s-label">Bal Sew</div>
+            <div class="s-val" style="color:var(--yellow)">9,200</div>
+          </div>
+          <div class="stat-item">
+            <div class="s-label">Capacity/Day</div>
+            <div class="s-val">1,159</div>
+          </div>
+          <div class="stat-item">
+            <div class="s-label">SAM</div>
+            <div class="s-val">19.15</div>
+          </div>
+        </div>
+        <div class="prog-bar"><div class="prog-fill" style="width:65%"></div></div>
+      </div>
+
+      <div class="line-card">
+        <div class="line-header">
+          <span class="line-name">L#11</span>
+          <span class="eff-badge eff-high">75% Eff</span>
+        </div>
+        <div class="line-stats">
+          <div class="stat-item">
+            <div class="s-label">Plan Qty</div>
+            <div class="s-val">28,087</div>
+          </div>
+          <div class="stat-item">
+            <div class="s-label">Bal Sew</div>
+            <div class="s-val" style="color:var(--green)">4,100</div>
+          </div>
+          <div class="stat-item">
+            <div class="s-label">Capacity/Day</div>
+            <div class="s-val">1,221</div>
+          </div>
+          <div class="stat-item">
+            <div class="s-label">SAM</div>
+            <div class="s-val">18.95</div>
+          </div>
+        </div>
+        <div class="prog-bar"><div class="prog-fill" style="width:85%"></div></div>
+      </div>
+    </div>
+
+    <!-- Order Status Tracker -->
+    <div class="section-title">Order Status Tracker</div>
+    <div class="order-status-section">
+      <div class="order-select-bar">
+        <div class="order-chip active" onclick="selectOrder(this,'KBI-2602-00244')">KBI-2602-00244</div>
+        <div class="order-chip" onclick="selectOrder(this,'KBI-2602-00252')">KBI-2602-00252</div>
+        <div class="order-chip" onclick="selectOrder(this,'TWS-2511-02184')">TWS-2511-02184</div>
+      </div>
+
+      <div id="tracker-area"></div>
+    </div>
+  </div>
+
+  <!-- ===== PPC PLANNER PAGE ===== -->
+  <div class="page" id="page-ppc">
+    <div class="topbar">
+      <h1>📋 PPC Planner</h1>
+      <div class="badge">Import Orders</div>
+    </div>
+
+    <div class="tbl-wrap">
+      <div class="tbl-header">
+        <h3>All Orders</h3>
+        <input class="tbl-search" id="ppc-search" placeholder="🔍 Search order, customer..." oninput="filterPPC()" />
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>PO Number</th>
+            <th>Customer</th>
+            <th>In Date</th>
+            <th>Line</th>
+            <th>Plan Qty</th>
+            <th>PPC Status</th>
+            <th>EX-MILL</th>
+          </tr>
+        </thead>
+        <tbody id="ppc-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ===== IE PLANNER PAGE ===== -->
+  <div class="page" id="page-ie">
+    <div class="topbar">
+      <h1>⚙️ IE Planner</h1>
+      <div class="badge">Efficiency Analysis</div>
+    </div>
+
+    <div class="ie-grid">
+      <div class="ie-card">
+        <h3>Line Summary — Jan 2026</h3>
+        <div class="ie-row"><span class="ie-lbl">L#1</span><span class="ie-val g">76.1%</span></div>
+        <div class="ie-row"><span class="ie-lbl">L#2</span><span class="ie-val y">67.9%</span></div>
+        <div class="ie-row"><span class="ie-lbl">L#3</span><span class="ie-val y">70.0%</span></div>
+        <div class="ie-row"><span class="ie-lbl">L#4</span><span class="ie-val g">71.9%</span></div>
+        <div class="ie-row"><span class="ie-lbl">L#5</span><span class="ie-val y">66.4%</span></div>
+        <div class="ie-row"><span class="ie-lbl">L#6</span><span class="ie-val g">73.3%</span></div>
+        <div class="ie-row"><span class="ie-lbl">L#8</span><span class="ie-val g">72.3%</span></div>
+      </div>
+      <div class="ie-card">
+        <h3>Capacity Analysis</h3>
+        <div class="ie-row"><span class="ie-lbl">L#1 — Per Day Capacity</span><span class="ie-val b">1,671</span></div>
+        <div class="ie-row"><span class="ie-lbl">L#2 — Per Day Capacity</span><span class="ie-val b">1,297</span></div>
+        <div class="ie-row"><span class="ie-lbl">L#3 — Per Day Capacity</span><span class="ie-val b">1,203</span></div>
+        <div class="ie-row"><span class="ie-lbl">L#4 — Per Day Capacity</span><span class="ie-val b">1,022</span></div>
+        <div class="ie-row"><span class="ie-lbl">L#5 — Per Day Capacity</span><span class="ie-val b">901</span></div>
+        <div class="ie-row"><span class="ie-lbl">L#6 — Per Day Capacity</span><span class="ie-val b">1,477</span></div>
+        <div class="ie-row"><span class="ie-lbl">L#8 — Per Day Capacity</span><span class="ie-val b">1,160</span></div>
+      </div>
+    </div>
+
+    <div class="eff-meter">
+      <h3>Efficiency by Line (%)</h3>
+      <div class="meter-bars" id="meter-bars"></div>
+      <div style="display:flex;gap:10px;margin-top:8px;" id="meter-labels"></div>
+    </div>
+
+    <div class="tbl-wrap">
+      <div class="tbl-header"><h3>Planned vs Produced SAM</h3></div>
+      <table>
+        <thead>
+          <tr>
+            <th>Line</th><th>Planned Qty</th><th>Avg SAM</th><th>Available SAM</th><th>Produced SAM</th><th>Efficiency</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>L#1</td><td>38,427</td><td>12.67</td><td>640,320</td><td>487,003</td><td><span class="eff-badge eff-high">76.1%</span></td></tr>
+          <tr><td>L#2</td><td>29,837</td><td>16.07</td><td>706,560</td><td>479,576</td><td><span class="eff-badge eff-mid">67.9%</span></td></tr>
+          <tr><td>L#3</td><td>24,055</td><td>17.88</td><td>614,400</td><td>430,202</td><td><span class="eff-badge eff-mid">70.0%</span></td></tr>
+          <tr><td>L#4</td><td>23,498</td><td>21.61</td><td>706,560</td><td>507,749</td><td><span class="eff-badge eff-high">71.9%</span></td></tr>
+          <tr><td>L#5</td><td>18,019</td><td>25.48</td><td>691,200</td><td>459,174</td><td><span class="eff-badge eff-mid">66.4%</span></td></tr>
+          <tr><td>L#6</td><td>33,967</td><td>15.25</td><td>706,560</td><td>517,941</td><td><span class="eff-badge eff-high">73.3%</span></td></tr>
+          <tr><td>L#8</td><td>26,674</td><td>19.15</td><td>706,560</td><td>510,841</td><td><span class="eff-badge eff-high">72.3%</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+
+<!-- ORDER DETAIL MODAL -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeModalIfBg(event)">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <div class="modal-title" id="modal-title">Order Details</div>
+    <div class="modal-grid" id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+// ===== DATA =====
+const orders = [
+  {
+    po: 'KBI-2602-00244',
+    oc: 'KBI-2602-00244BEIGE SIMP',
+    customer: 'KIABI',
+    line: 'L#1-H',
+    style: 'MGMW18PSLIM',
+    fabric: 'NON DENIM, TWILL_315 PEACH BEIGE SIMP, 30X20+70D/177X70, US DYEING & FINISHING / 78% US COTTON, 20% PIW, 2% SPANDEX',
+    wash: 'Rinse',
+    color: 'BEIGE SIMP',
+    product: 'Repeat',
+    sam: 12.26,
+    efficiency: '75%',
+    capacity: 1703,
+    indCutQty: 9247,
+    planQty: 9319,
+    ttlStitch: 7707,
+    balSew: 1612,
+    indTarget: '22-Mar-2026',
+    startSewOut: '27-Mar-2026',
+    endSewDate: '27-Mar-2026',
+    ppcStatus: 'Cutting done',
+    balDays: 7,
+    clrncFabric: '04-Mar-2026',
+    trims: '27-Feb-2026',
+    exMill: '03-Apr-2026',
+    exMillWk: 14,
+    exMillMnth: 'Apr 26',
+    inductionGap: 5,
+    lt: 35,
+    stages: [
+      { name: 'PO Received', status: 'done', detail: 'PO KBI-2602-00244 received. Customer: KIABI. Style: MGMW18PSLIM.' },
+      { name: 'Fabric Clearance', status: 'done', detail: 'Fabric cleared on 04-Mar-2026. NON DENIM TWILL_315 PEACH BEIGE SIMP approved.' },
+      { name: 'Trims Cleared', status: 'done', detail: 'Trims cleared on 27-Feb-2026. Label IH Pending.' },
+      { name: 'Induction / Cut', status: 'done', detail: 'Induction Target: 22-Mar-2026. Cut Qty: 9,247 pcs.' },
+      { name: 'Sew Start', status: 'current', detail: 'Sew Started: 27-Mar-2026. Balance to sew: 1,612 pcs. PPC Status: Cutting done.' },
+      { name: 'Sew Out', status: 'pending', detail: 'Planned Sew Out: 27-Mar-2026.' },
+      { name: 'EX-MILL', status: 'pending', detail: 'EX-MILL planned: 03-Apr-2026 (Wk 14, Apr 26).' }
+    ]
+  },
+  {
+    po: 'KBI-2602-00252',
+    oc: 'KBI-2602-00252BEIGE SIMP',
+    customer: 'KIABI',
+    line: 'L#1-H',
+    style: 'MGMW18PSLIM',
+    fabric: 'NON DENIM, TWILL_315 PEACH BEIGE SIMP, 30X20+70D/177X70, US DYEING & FINISHING / 78% US COTTON, 20% PIW, 2% SPANDEX',
+    wash: 'Rinse',
+    color: 'BEIGE SIMP',
+    product: 'Repeat',
+    sam: 12.26,
+    efficiency: '80%',
+    capacity: 1817,
+    indCutQty: 2870,
+    planQty: 2870,
+    ttlStitch: '—',
+    balSew: 2870,
+    indTarget: '22-Mar-2026',
+    startSewOut: '27-Mar-2026',
+    endSewDate: '30-Mar-2026',
+    ppcStatus: 'Cutting done',
+    balDays: 11,
+    clrncFabric: '11-Mar-2026',
+    trims: '06-Mar-2026',
+    exMill: '10-Apr-2026',
+    exMillWk: 15,
+    exMillMnth: 'Apr 26',
+    inductionGap: 5,
+    lt: 35,
+    stages: [
+      { name: 'PO Received', status: 'done', detail: 'PO KBI-2602-00252 received. Customer: KIABI. Style: MGMW18PSLIM.' },
+      { name: 'Fabric Clearance', status: 'done', detail: 'Fabric cleared on 11-Mar-2026. BEIGE SIMP approved.' },
+      { name: 'Trims Cleared', status: 'done', detail: 'Trims cleared on 06-Mar-2026. Label IH Pending.' },
+      { name: 'Induction / Cut', status: 'done', detail: 'Induction Target: 22-Mar-2026. Cut Qty: 2,870 pcs.' },
+      { name: 'Sew Start', status: 'current', detail: 'Sew Started: 27-Mar-2026. Balance to sew: 2,870 pcs. PPC Status: Cutting done.' },
+      { name: 'Sew Out', status: 'pending', detail: 'Planned Sew Out: 30-Mar-2026.' },
+      { name: 'EX-MILL', status: 'pending', detail: 'EX-MILL planned: 10-Apr-2026 (Wk 15, Apr 26).' }
+    ]
+  },
+  {
+    po: 'TWS-2511-02184',
+    oc: 'TWS-2511-021840218415453 DARK BLUE DENIM',
+    customer: 'TWO SOON',
+    line: 'L#2 MZ',
+    style: '13252617 TKMBRADY LOOSE JEANS TWS4321 NOOS',
+    fabric: 'DENIM, 1399-84-151, RANTEX / 20% PIW 80% COTTON / BLUE ,3/1 RHT',
+    wash: 'Enzyme / Stone',
+    color: '15453 DARK BLUE DENIM',
+    product: 'Repeat',
+    sam: 15.82,
+    efficiency: '90%',
+    capacity: 1884,
+    indCutQty: 5073,
+    planQty: 5150,
+    ttlStitch: 60,
+    balSew: 5090,
+    indTarget: '22-Mar-2026',
+    startSewOut: '27-Mar-2026',
+    endSewDate: '30-Mar-2026',
+    ppcStatus: 'Cutting done',
+    balDays: 8,
+    clrncFabric: '15-Feb-2026',
+    trims: '30-Jan-2026',
+    exMill: '07-Apr-2026',
+    exMillWk: 15,
+    exMillMnth: 'Apr 26',
+    inductionGap: 15,
+    lt: 67,
+    stages: [
+      { name: 'PO Received', status: 'done', detail: 'PO TWS-2511-02184 received. Customer: TWO SOON. Style: 13252617 TKMBRADY LOOSE JEANS.' },
+      { name: 'Fabric Clearance', status: 'done', detail: 'Fabric cleared on 15-Feb-2026. DENIM 1399-84-151 RANTEX approved.' },
+      { name: 'Trims Cleared', status: 'done', detail: 'Trims cleared on 30-Jan-2026. Thread pending.' },
+      { name: 'Induction / Cut', status: 'done', detail: 'Induction Target: 22-Mar-2026. Cut Qty: 5,073 pcs.' },
+      { name: 'Sew Start', status: 'current', detail: 'Sew Started: 27-Mar-2026. Balance to sew: 5,090 pcs. PPC Status: Cutting done.' },
+      { name: 'Sew Out', status: 'pending', detail: 'Planned Sew Out: 30-Mar-2026.' },
+      { name: 'EX-MILL', status: 'pending', detail: 'EX-MILL planned: 07-Apr-2026 (Wk 15, Apr 26). Market Ex-mill: 23-Apr-2026.' }
+    ]
+  }
+];
+
+const ppcRows = [
+  { po:'KBI-2602-00244', cust:'KIABI', inDate:'22-Mar-2026', line:'L#1-H', planQty:9319, status:'Cutting done', statusCls:'s-cutting', exMill:'03-Apr-2026' },
+  { po:'KBI-2602-00252', cust:'KIABI', inDate:'22-Mar-2026', line:'L#1-H', planQty:2870, status:'Cutting done', statusCls:'s-cutting', exMill:'10-Apr-2026' },
+  { po:'KBI-2602-00252', cust:'KIABI', inDate:'25-Mar-2026', line:'L#1-H', planQty:5882, status:'On FID/BW', statusCls:'s-fid', exMill:'10-Apr-2026' },
+  { po:'KBI-2603-00290', cust:'KIABI', inDate:'28-Mar-2026', line:'L#1-H', planQty:7507, status:'On FID/BW', statusCls:'s-fid', exMill:'24-Apr-2026' },
+  { po:'KBI-2603-00267', cust:'KIABI', inDate:'02-Apr-2026', line:'L#1-H', planQty:7759, status:'Fabric IH/CA Awaited', statusCls:'s-awaited', exMill:'01-May-2026' },
+  { po:'KBI-2602-00247', cust:'KIABI-GBL', inDate:'08-Apr-2026', line:'L#1-H', planQty:15112, status:'Fabric awaited', statusCls:'s-awaited', exMill:'30-Apr-2026' },
+  { po:'TWS-2511-02184', cust:'TWO SOON', inDate:'22-Mar-2026', line:'L#2 MZ', planQty:5150, status:'Cutting done', statusCls:'s-cutting', exMill:'07-Apr-2026' },
+  { po:'TWS-2511-02184', cust:'TWO SOON', inDate:'22-Mar-2026', line:'L#4 MZ', planQty:2562, status:'Cutting done', statusCls:'s-cutting', exMill:'10-Apr-2026' },
+  { po:'KBI-2601-00056', cust:'KIABI', inDate:'25-Feb-2026', line:'L#1-H', planQty:10130, status:'On PPR/AT MMT', statusCls:'s-fid', exMill:'13-Mar-2026' },
+  { po:'KBI-2601-00058', cust:'KIABI', inDate:'05-Mar-2026', line:'L#1-H', planQty:578, status:'Fabric awaited', statusCls:'s-awaited', exMill:'13-Mar-2026' },
+];
+
+// ===== INIT =====
+function init() {
+  renderPPCTable(ppcRows);
+  renderTracker('KBI-2602-00244');
+  renderMeterBars();
+}
+
+// ===== PAGE SWITCH =====
+function switchPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  const navMap = { dashboard: 0, ppc: 1, ie: 2 };
+  document.querySelectorAll('.nav-item')[navMap[id]].classList.add('active');
+}
+
+// ===== ORDER TRACKER =====
+let activeStageIdx = null;
+
+function selectOrder(el, po) {
+  document.querySelectorAll('.order-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  activeStageIdx = null;
+  renderTracker(po);
+}
+
+function renderTracker(po) {
+  const o = orders.find(x => x.po === po);
+  if (!o) return;
+  const area = document.getElementById('tracker-area');
+
+  let stagesHTML = '<div class="stage-tracker">';
+  o.stages.forEach((s, i) => {
+    const icon = s.status === 'done' ? '✓' : s.status === 'current' ? '▶' : '○';
+    stagesHTML += `
+      <div class="stage-item ${s.status}" onclick="showStageDetail(${i}, '${po}')">
+        <div class="stage-dot">${icon}</div>
+        <div class="stage-label">${s.name}</div>
+      </div>`;
+  });
+  stagesHTML += '</div>';
+
+  stagesHTML += `<div class="stage-detail-panel" id="sdp"></div>`;
+  area.innerHTML = stagesHTML;
+}
+
+function showStageDetail(idx, po) {
+  const o = orders.find(x => x.po === po);
+  const s = o.stages[idx];
+  const panel = document.getElementById('sdp');
+  if (activeStageIdx === idx) {
+    panel.classList.remove('visible');
+    activeStageIdx = null;
+    return;
+  }
+  panel.innerHTML = `<div class="sdp-title">📌 ${s.name}</div><div class="sdp-info">${s.detail}</div>`;
+  panel.classList.add('visible');
+  activeStageIdx = idx;
+}
+
+// ===== PPC TABLE =====
+function renderPPCTable(rows) {
+  const tbody = document.getElementById('ppc-tbody');
+  tbody.innerHTML = rows.map(r => `
+    <tr onclick="openModal('${r.po}')">
+      <td><span class="po-link">${r.po}</span></td>
+      <td>${r.cust}</td>
+      <td>${r.inDate}</td>
+      <td>${r.line}</td>
+      <td>${r.planQty.toLocaleString()}</td>
+      <td><span class="status-pill ${r.statusCls}">${r.status}</span></td>
+      <td>${r.exMill}</td>
+    </tr>`).join('');
+}
+
+function filterPPC() {
+  const q = document.getElementById('ppc-search').value.toLowerCase();
+  const filtered = ppcRows.filter(r =>
+    r.po.toLowerCase().includes(q) || r.cust.toLowerCase().includes(q) || r.line.toLowerCase().includes(q)
+  );
+  renderPPCTable(filtered);
+}
+
+// ===== MODAL =====
+function openModal(po) {
+  const o = orders.find(x => x.po === po);
+  if (!o) {
+    const r = ppcRows.find(x => x.po === po);
+    if (!r) return;
+    document.getElementById('modal-title').textContent = 'Order: ' + po;
+    document.getElementById('modal-body').innerHTML = `
+      <div class="detail-field"><label>Customer</label><span>${r.cust}</span></div>
+      <div class="detail-field"><label>Line</label><span>${r.line}</span></div>
+      <div class="detail-field"><label>Plan Qty</label><span>${r.planQty.toLocaleString()}</span></div>
+      <div class="detail-field"><label>PPC Status</label><span>${r.status}</span></div>
+      <div class="detail-field"><label>Induction Date</label><span>${r.inDate}</span></div>
+      <div class="detail-field"><label>EX-MILL</label><span>${r.exMill}</span></div>
+    `;
+    document.getElementById('modal-overlay').classList.add('open');
+    return;
+  }
+
+  document.getElementById('modal-title').textContent = '📦 ' + o.po;
+  document.getElementById('modal-body').innerHTML = `
+    <div class="detail-field"><label>Customer</label><span>${o.customer}</span></div>
+    <div class="detail-field"><label>OC Number</label><span>${o.oc}</span></div>
+    <div class="detail-field"><label>Line</label><span>${o.line}</span></div>
+    <div class="detail-field"><label>Style</label><span>${o.style}</span></div>
+    <div class="detail-field"><label>Color</label><span>${o.color}</span></div>
+    <div class="detail-field"><label>Wash Type</label><span>${o.wash}</span></div>
+    <div class="detail-field full"><label>Fabric</label><span>${o.fabric}</span></div>
+    <div class="detail-field"><label>SAM</label><span>${o.sam}</span></div>
+    <div class="detail-field"><label>Efficiency</label><span>${o.efficiency}</span></div>
+    <div class="detail-field"><label>Per Day Capacity</label><span>${o.capacity.toLocaleString()}</span></div>
+    <div class="detail-field"><label>Ind / Cut Qty</label><span>${(o.indCutQty||'—').toLocaleString?.()??o.indCutQty}</span></div>
+    <div class="detail-field"><label>Plan Qty</label><span>${o.planQty.toLocaleString()}</span></div>
+    <div class="detail-field"><label>Total Stitched</label><span>${o.ttlStitch}</span></div>
+    <div class="detail-field"><label>Balance Sew</label><span>${o.balSew.toLocaleString()}</span></div>
+    <div class="detail-field"><label>Induction Target</label><span>${o.indTarget}</span></div>
+    <div class="detail-field"><label>Start Sew Out</label><span>${o.startSewOut}</span></div>
+    <div class="detail-field"><label>End Sew Date</label><span>${o.endSewDate}</span></div>
+    <div class="detail-field"><label>PPC Status</label><span>${o.ppcStatus}</span></div>
+    <div class="detail-field"><label>Balance Days</label><span>${o.balDays}</span></div>
+    <div class="detail-field"><label>Fabric Clearance</label><span>${o.clrncFabric}</span></div>
+    <div class="detail-field"><label>Trims Clearance</label><span>${o.trims}</span></div>
+    <div class="detail-field"><label>EX-MILL Date</label><span>${o.exMill}</span></div>
+    <div class="detail-field"><label>EX-MILL Week</label><span>${o.exMillWk}</span></div>
+    <div class="detail-field"><label>EX-MILL Month</label><span>${o.exMillMnth}</span></div>
+    <div class="detail-field"><label>Induction Gap</label><span>${o.inductionGap} days</span></div>
+    <div class="detail-field"><label>Lead Time</label><span>${o.lt} days</span></div>
+  `;
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
+function closeModalIfBg(e) { if (e.target === document.getElementById('modal-overlay')) closeModal(); }
+
+// ===== IE METER BARS =====
+function renderMeterBars() {
+  const lines = [
+    { name:'L#1', eff:76.1 },
+    { name:'L#2', eff:67.9 },
+    { name:'L#3', eff:70.0 },
+    { name:'L#4', eff:71.9 },
+    { name:'L#5', eff:66.4 },
+    { name:'L#6', eff:73.3 },
+    { name:'L#8', eff:72.3 },
+  ];
+
+  const barsEl = document.getElementById('meter-bars');
+  const lblsEl = document.getElementById('meter-labels');
+
+  barsEl.innerHTML = lines.map(l => {
+    const isLow = l.eff < 70;
+    return `
+      <div class="meter-bar-wrap">
+        <div class="meter-pct">${l.eff}%</div>
+        <div class="meter-bar-outer" style="height:80px">
+          <div class="meter-bar-inner ${isLow ? 'low' : ''}" style="height:${l.eff}%"></div>
+        </div>
+      </div>`;
+  }).join('');
+
+  lblsEl.innerHTML = lines.map(l => `<div class="meter-label" style="flex:1;text-align:center">${l.name}</div>`).join('');
+}
+
+init();
+</script>
+</body>
+</html>

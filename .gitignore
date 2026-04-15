@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+*.so
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+.venv-*/
+venv/
+ENV/
+
+# VS Code
+.vscode/
+!.vscode/tasks.json
+!.vscode/settings.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# -----------------------------
+# Sensitive / local data files
+# -----------------------------
+# Never commit real Excel inputs or exported planner history.
+*.xlsx
+*.xlsm
+
+# Local caches / outputs
+data/live_planner_cache.json
+data/saved_plan_history.csv
+data/skill_matrix_normalized_cache.csv
+data/skill_matrix_normalized_cache_meta.json
+
+# Skill matrix inputs often contain names/IDs (treat as sensitive)
+data/*skill*matrix*.xlsx
+
+# Trained artifacts/encoders are derived from sensitive data; keep them out of public repos.
+data/models/
