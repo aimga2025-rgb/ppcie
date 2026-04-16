@@ -5,7 +5,7 @@ This project expects some Excel/CSV inputs under `data/`, but **do not commit re
 Recommended safe workflow:
 
 - Keep the repository public for code only.
-- Load sensitive Excel files at runtime (e.g., via Streamlit upload or from private storage).
+- Load sensitive Excel files at runtime (from private storage or secure internal systems).
 - Commit only:
   - schemas/templates with no sensitive rows, and/or
   - synthetic/anonymized sample data.

@@ -1,16 +1,12 @@
-streamlit
+# Dash app dependencies
 
-# Dash dependencies (ppc.py UI framework; Streamlit app reuses its business logic)
 dash
 dash-bootstrap-components
 
 pandas
 openpyxl
 
-# Optional: pull private inputs from Supabase Storage
-supabase
-
-# ML (optional depending on which pages/features you port)
+# ML (optional)
 xgboost
 scikit-learn
 joblib
