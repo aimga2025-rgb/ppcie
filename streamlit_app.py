@@ -531,14 +531,22 @@ def _sync_private_inputs_into_ppc() -> None:
 
     history_obj = inputs.get("plan_history")
     if history_obj is not None:
-        # If user uploads a plan history CSV, save it to the default path used by ppc.py
-        # so both Streamlit and ppc.py see the same history file structure.
+        # Prefer using the downloaded/uploaded file path directly.
+        # On Streamlit Cloud, writing into the repo folder can be unreliable.
+        try:
+            if isinstance(history_obj, Path):
+                ppc_dash.PLAN_HISTORY_PATH = Path(history_obj)
+            else:
+                # If we got an UploadedFile-like object, persist it and point PPC to it.
+                tmp_path = _as_path(history_obj, ".csv")
+                if tmp_path is not None:
+                    ppc_dash.PLAN_HISTORY_PATH = Path(tmp_path)
+        except Exception:
+            pass
+
+        # Best-effort: also copy into the default location (ignored if not writable).
         try:
             ppc_dash.PLAN_HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
-            if isinstance(history_obj, Path):
-                ppc_dash.PLAN_HISTORY_PATH.write_bytes(history_obj.read_bytes())
-            else:
-                ppc_dash.PLAN_HISTORY_PATH.write_bytes(history_obj.getvalue())
         except Exception:
             pass
 
@@ -549,7 +557,9 @@ _sync_private_inputs_into_ppc()
 if page == "Dashboard":
     st.subheader("📊 Production Dashboard")
 
-    plan_df = _read_saved_plans_csv(str(ppc_dash.PLAN_HISTORY_PATH))
+    plan_history_path = inputs.get("plan_history") or ppc_dash.PLAN_HISTORY_PATH
+    plan_df = _read_saved_plans_csv(str(plan_history_path))
+    st.caption(f"Saved plan history rows: {len(plan_df)}")
     month_options = _pick_month_options(plan_df)
 
     col1, col2, col3 = st.columns(3)
